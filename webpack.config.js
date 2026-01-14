@@ -19,6 +19,11 @@ loaders.push({
   ],
 });
 
+loaders.push({
+  test: /\.node$/,
+  use: 'node-loader',
+});
+
 /** @type WebpackConfig */
 const extensionConfig = {
   target: 'node', // VS Code extensions run in a Node.js-context 📖 -> https://webpack.js.org/configuration/node/
@@ -38,6 +43,7 @@ const extensionConfig = {
     '@opentelemetry/instrumentation': 'commonjs @opentelemetry/instrumentation', // ignored because we don't ship instrumentation
     '@azure/opentelemetry-instrumentation-azure-sdk': 'commonjs @azure/opentelemetry-instrumentation-azure-sdk', // ignored because we don't ship instrumentation
     '@azure/functions-core': '@azure/functions-core', // ignored because we don't ship instrumentation
+    '@vscode/windows-process-tree': 'commonjs2 @vscode/windows-process-tree', // ignored because we don't ship this native module
   },
   resolve: {
     // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader
