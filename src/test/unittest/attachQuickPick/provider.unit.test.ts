@@ -13,6 +13,7 @@ import { IAttachItem } from '../../../extension/debugger/attachQuickPick/types';
 import { WmicProcessParser } from '../../../extension/debugger/attachQuickPick/wmicProcessParser';
 import * as platform from '../../../extension/common/platform';
 import * as rawProcessApis from '../../../extension/common/process/rawProcessApis';
+import * as windowsProcessTree from '@vscode/windows-process-tree';
 
 use(chaiAsPromised);
 
@@ -20,11 +21,13 @@ suite('Attach to process - process provider', () => {
     let provider: AttachProcessProvider;
     let getOSTypeStub: sinon.SinonStub;
     let plainExecStub: sinon.SinonStub;
+    let getAllProcessesStub: sinon.SinonStub;
 
     setup(() => {
         provider = new AttachProcessProvider();
         getOSTypeStub = sinon.stub(platform, 'getOSType');
         plainExecStub = sinon.stub(rawProcessApis, 'plainExec');
+        getAllProcessesStub = sinon.stub(windowsProcessTree, 'getAllProcesses');
     });
 
     teardown(() => {
@@ -129,20 +132,26 @@ suite('Attach to process - process provider', () => {
     });
 
     test('The Windows process list command should be called if the platform is Windows', async () => {
-        const windowsOutput = `CommandLine=\r
-Name=System\r
-ProcessId=4\r
-\r
-\r
-CommandLine=sihost.exe\r
-Name=sihost.exe\r
-ProcessId=5728\r
-\r
-\r
-CommandLine=C:\\WINDOWS\\system32\\svchost.exe -k UnistackSvcGroup -s CDPUserSvc\r
-Name=svchost.exe\r
-ProcessId=5912\r
-`;
+        const processList = [
+            {
+                pid: 4,
+                ppid: 0,
+                name: 'System',
+                commandLine: '',
+            },
+            {
+                pid: 5728,
+                ppid: 0,
+                name: 'sihost.exe',
+                commandLine: 'sihost.exe',
+            },
+            {
+                pid: 5912,
+                ppid: 0,
+                name: 'svchost.exe',
+                commandLine: 'C:\\WINDOWS\\system32\\svchost.exe -k UnistackSvcGroup -s CDPUserSvc',
+            },
+        ];
         const expectedOutput: IAttachItem[] = [
             {
                 label: 'System',
@@ -170,19 +179,10 @@ ProcessId=5912\r
             },
         ];
         getOSTypeStub.returns(platform.OSType.Windows);
-        plainExecStub
-            .withArgs(WmicProcessParser.wmicCommand.command, sinon.match.any, sinon.match.any, sinon.match.any)
-            .resolves({ stdout: windowsOutput });
+        getAllProcessesStub.callsArgWith(0, processList);
 
         const attachItems = await provider._getInternalProcessEntries();
-        sinon.assert.calledOnceWithExactly(
-            plainExecStub,
-            WmicProcessParser.wmicCommand.command,
-            WmicProcessParser.wmicCommand.args,
-            sinon.match.any,
-            sinon.match.any,
-        );
-
+        sinon.assert.calledOnce(getAllProcessesStub);
         assert.deepEqual(attachItems, expectedOutput);
     });
 
@@ -308,20 +308,26 @@ ProcessId=5912\r
         });
 
         test('Items returned by getAttachItems should be sorted alphabetically', async () => {
-            const windowsOutput = `CommandLine=\r
-Name=System\r
-ProcessId=4\r
-\r
-\r
-CommandLine=\r
-Name=svchost.exe\r
-ProcessId=5372\r
-\r
-\r
-CommandLine=sihost.exe\r
-Name=sihost.exe\r
-ProcessId=5728\r
-`;
+            const processList = [
+                {
+                    pid: 4,
+                    ppid: 0,
+                    name: 'System',
+                    commandLine: '',
+                },
+                {
+                    pid: 5728,
+                    ppid: 0,
+                    name: 'sihost.exe',
+                    commandLine: 'sihost.exe',
+                },
+                {
+                    pid: 5372,
+                    ppid: 0,
+                    name: 'svchost.exe',
+                    commandLine: '',
+                },
+            ];
             const expectedOutput: IAttachItem[] = [
                 {
                     label: 'sihost.exe',
@@ -349,9 +355,7 @@ ProcessId=5728\r
                 },
             ];
 
-            plainExecStub
-                .withArgs(WmicProcessParser.wmicCommand.command, sinon.match.any, sinon.match.any, sinon.match.any)
-                .resolves({ stdout: windowsOutput });
+            getAllProcessesStub.callsArgWith(0, processList);
 
             const output = await provider.getAttachItems();
 
@@ -359,35 +363,46 @@ ProcessId=5728\r
         });
 
         test('Python processes should be at the top of the list returned by getAttachItems', async () => {
-            const windowsOutput = `CommandLine=\r
-Name=System\r
-ProcessId=4\r
-\r
-\r
-CommandLine=\r
-Name=svchost.exe\r
-ProcessId=5372\r
-\r
-\r
-CommandLine=sihost.exe\r
-Name=sihost.exe\r
-ProcessId=5728\r
-\r
-\r
-CommandLine=C:\\WINDOWS\\system32\\svchost.exe -k UnistackSvcGroup -s CDPUserSvc\r
-Name=svchost.exe\r
-ProcessId=5912\r
-\r
-\r
-CommandLine=C:\\Users\\Contoso\\AppData\\Local\\Programs\\Python\\Python37\\python.exe c:/Users/Contoso/Documents/hello_world.py\r
-Name=python.exe\r
-ProcessId=6028\r
-\r
-\r
-CommandLine=C:\\Users\\Contoso\\AppData\\Local\\Programs\\Python\\Python37\\python.exe c:/Users/Contoso/Documents/foo_bar.py\r
-Name=python.exe\r
-ProcessId=8026\r
-            `;
+            const processList = [
+                {
+                    pid: 4,
+                    ppid: 0,
+                    name: 'System',
+                    commandLine: '',
+                },
+                {
+                    pid: 5372,
+                    ppid: 0,
+                    name: 'svchost.exe',
+                    commandLine: '',
+                },
+                {
+                    pid: 5728,
+                    ppid: 0,
+                    name: 'sihost.exe',
+                    commandLine: 'sihost.exe',
+                },
+                {
+                    pid: 5912,
+                    ppid: 0,
+                    name: 'svchost.exe',
+                    commandLine: 'C:\\WINDOWS\\system32\\svchost.exe -k UnistackSvcGroup -s CDPUserSvc',
+                },
+                {
+                    pid: 6028,
+                    ppid: 0,
+                    name: 'python.exe',
+                    commandLine:
+                        'C:\\Users\\Contoso\\AppData\\Local\\Programs\\Python\\Python37\\python.exe c:/Users/Contoso/Documents/hello_world.py',
+                },
+                {
+                    pid: 8026,
+                    ppid: 0,
+                    name: 'python.exe',
+                    commandLine:
+                        'C:\\Users\\Contoso\\AppData\\Local\\Programs\\Python\\Python37\\python.exe c:/Users/Contoso/Documents/foo_bar.py',
+                },
+            ];
             const expectedOutput: IAttachItem[] = [
                 {
                     label: 'python.exe',
@@ -441,13 +456,106 @@ ProcessId=8026\r
                 },
             ];
 
-            plainExecStub
-                .withArgs(WmicProcessParser.wmicCommand.command, sinon.match.any, sinon.match.any, sinon.match.any)
-                .resolves({ stdout: windowsOutput });
+            getAllProcessesStub.callsArgWith(0, processList);
 
             const output = await provider.getAttachItems();
 
             assert.deepEqual(output, expectedOutput);
+        });
+    });
+
+    suite('Windows fallback to wmic', () => {
+        setup(() => {
+            getOSTypeStub.returns(platform.OSType.Windows);
+        });
+
+        test('Should fallback to wmic when getAllProcesses fails', async () => {
+            const windowsOutput = `CommandLine=\r
+Name=System\r
+ProcessId=4\r
+\r
+\r
+CommandLine=sihost.exe\r
+Name=sihost.exe\r
+ProcessId=5728\r
+`;
+            const expectedOutput: IAttachItem[] = [
+                {
+                    label: 'System',
+                    description: '4',
+                    detail: '',
+                    id: '4',
+                    processName: 'System',
+                    commandLine: '',
+                },
+                {
+                    label: 'sihost.exe',
+                    description: '5728',
+                    detail: 'sihost.exe',
+                    id: '5728',
+                    processName: 'sihost.exe',
+                    commandLine: 'sihost.exe',
+                },
+            ];
+
+            // Mock getAllProcesses to fail
+            getAllProcessesStub.callsArgWith(0, undefined);
+            // Mock plainExec to return wmic output
+            plainExecStub
+                .withArgs(WmicProcessParser.wmicCommand.command, sinon.match.any, sinon.match.any, sinon.match.any)
+                .resolves({ stdout: windowsOutput });
+
+            const attachItems = await provider._getInternalProcessEntries();
+
+            // Verify getAllProcesses was attempted
+            sinon.assert.calledOnce(getAllProcessesStub);
+            // Verify plainExec (wmic) was called as fallback
+            sinon.assert.calledOnceWithExactly(
+                plainExecStub,
+                WmicProcessParser.wmicCommand.command,
+                WmicProcessParser.wmicCommand.args,
+                sinon.match.any,
+                sinon.match.any,
+            );
+            assert.deepEqual(attachItems, expectedOutput);
+        });
+
+        test('Should use wmic when getAllProcesses throws an error', async () => {
+            const windowsOutput = `CommandLine=\r
+Name=System\r
+ProcessId=4\r
+`;
+            const expectedOutput: IAttachItem[] = [
+                {
+                    label: 'System',
+                    description: '4',
+                    detail: '',
+                    id: '4',
+                    processName: 'System',
+                    commandLine: '',
+                },
+            ];
+
+            // Mock getAllProcesses to throw error
+            getAllProcessesStub.throws(new Error('getAllProcesses failed'));
+            // Mock plainExec to return wmic output
+            plainExecStub
+                .withArgs(WmicProcessParser.wmicCommand.command, sinon.match.any, sinon.match.any, sinon.match.any)
+                .resolves({ stdout: windowsOutput });
+
+            const attachItems = await provider._getInternalProcessEntries();
+
+            // Verify getAllProcesses was attempted
+            sinon.assert.calledOnce(getAllProcessesStub);
+            // Verify plainExec (wmic) was called as fallback
+            sinon.assert.calledOnceWithExactly(
+                plainExecStub,
+                WmicProcessParser.wmicCommand.command,
+                WmicProcessParser.wmicCommand.args,
+                sinon.match.any,
+                sinon.match.any,
+            );
+            assert.deepEqual(attachItems, expectedOutput);
         });
     });
 });
